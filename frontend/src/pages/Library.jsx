@@ -3,6 +3,11 @@ import { useDropzone } from 'react-dropzone';
 import { getEbooks, uploadEbook, downloadEbook, convertEbook, deleteEbook } from '../api';
 import './Library.css';
 
+const BOOK_COLORS = [
+  '#8B4513', '#2F4F4F', '#800020', '#1C3A5F', '#3D2B1F', 
+  '#4A0E0E', '#2E4600', '#4B3621', '#5C4033', '#3B2F2F'
+];
+
 function Library() {
   const [ebooks, setEbooks] = useState([]);
   const [search, setSearch] = useState('');
@@ -10,6 +15,8 @@ function Library() {
   const [uploading, setUploading] = useState(false);
   const [converting, setConverting] = useState(null);
   const [uploadData, setUploadData] = useState({ title: '', author: '' });
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     fetchEbooks();
@@ -40,6 +47,7 @@ function Library() {
     try {
       await uploadEbook(file, uploadData.title || file.name, uploadData.author);
       setUploadData({ title: '', author: '' });
+      setShowUploadModal(false);
       fetchEbooks(search);
     } catch (err) {
       alert('Upload failed: ' + (err.response?.data?.detail || err.message));
@@ -97,10 +105,11 @@ function Library() {
   };
 
   const handleDelete = async (ebook) => {
-    if (!confirm('Are you sure you want to delete this ebook?')) return;
+    if (!confirm('Are you sure you want to delete this book?')) return;
     
     try {
       await deleteEbook(ebook.id);
+      setSelectedBook(null);
       fetchEbooks(search);
     } catch (err) {
       alert('Delete failed');
@@ -118,28 +127,125 @@ function Library() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
+  const getBookColor = (title) => {
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+      hash = title.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return BOOK_COLORS[Math.abs(hash) % BOOK_COLORS.length];
+  };
+
   return (
     <div className="library-container">
       <header className="library-header">
-        <h1>My Ebook Library</h1>
-        <button onClick={handleLogout} className="btn-secondary">Logout</button>
+        <div className="header-left">
+          <div className="logo">
+            <span className="logo-icon">📚</span>
+            <h1>My Library</h1>
+          </div>
+        </div>
+        <div className="header-right">
+          <form onSubmit={handleSearch} className="search-form">
+            <input
+              type="text"
+              placeholder="Search collection..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button type="submit">🔍</button>
+          </form>
+          <button onClick={handleLogout} className="logout-btn">Logout</button>
+        </div>
       </header>
 
       <div className="library-content">
         <aside className="sidebar">
-          <div className="upload-section">
-            <h3>Upload Ebook</h3>
+          <div className="shelf-ornament">
+            <div className="shelf-wood"></div>
+            <div className="shelf-shadow"></div>
+          </div>
+          
+          <button className="add-book-btn" onClick={() => setShowUploadModal(true)}>
+            <span className="plus-icon">+</span>
+            <span>Add Book</span>
+          </button>
+
+          <div className="library-stats">
+            <div className="stat">
+              <span className="stat-number">{ebooks.length}</span>
+              <span className="stat-label">Books</span>
+            </div>
+            <div className="stat">
+              <span className="stat-number">{ebooks.filter(e => e.file_format === 'pdf').length}</span>
+              <span className="stat-label">PDFs</span>
+            </div>
+            <div className="stat">
+              <span className="stat-number">{ebooks.filter(e => e.file_format === 'epub').length}</span>
+              <span className="stat-label">EPUBs</span>
+            </div>
+          </div>
+        </aside>
+
+        <main className="main-content">
+          {loading ? (
+            <div className="loading-state">
+              <div className="loading-spinner"></div>
+              <p>Loading your library...</p>
+            </div>
+          ) : ebooks.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-shelf">
+                <div className="empty-book-placeholder"></div>
+                <div className="empty-book-placeholder"></div>
+                <div className="empty-book-placeholder"></div>
+              </div>
+              <h2>Your library is empty</h2>
+              <p>Add your first book to start your collection</p>
+              <button className="primary-btn" onClick={() => setShowUploadModal(true)}>
+                Add Your First Book
+              </button>
+            </div>
+          ) : (
+            <div className="bookshelf">
+              {ebooks.map((ebook) => (
+                <div 
+                  key={ebook.id} 
+                  className="book"
+                  style={{ '--book-color': getBookColor(ebook.title) }}
+                  onClick={() => setSelectedBook(ebook)}
+                >
+                  <div className="book-spine">
+                    <span className="book-title">{ebook.title}</span>
+                    {ebook.author && <span className="book-author">{ebook.author}</span>}
+                  </div>
+                  <div className="book-cover">
+                    <div className="cover-content">
+                      <span className="cover-format">{ebook.file_format.toUpperCase()}</span>
+                      <span className="cover-title">{ebook.title}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {showUploadModal && (
+        <div className="modal-overlay" onClick={() => setShowUploadModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2>Add New Book</h2>
             
             <div className="upload-form">
               <input
                 type="text"
-                placeholder="Title (optional)"
+                placeholder="Book Title"
                 value={uploadData.title}
                 onChange={(e) => setUploadData({ ...uploadData, title: e.target.value })}
               />
               <input
                 type="text"
-                placeholder="Author (optional)"
+                placeholder="Author"
                 value={uploadData.author}
                 onChange={(e) => setUploadData({ ...uploadData, author: e.target.value })}
               />
@@ -152,74 +258,74 @@ function Library() {
               ) : isDragActive ? (
                 <p>Drop the file here...</p>
               ) : (
-                <p>Drag & drop a PDF/EPUB/MOBI file here, or click to select</p>
+                <div className="dropzone-content">
+                  <span className="dropzone-icon">📖</span>
+                  <p>Drag & drop your book here</p>
+                  <span className="dropzone-formats">PDF, EPUB, MOBI</span>
+                </div>
               )}
             </div>
-          </div>
-        </aside>
 
-        <main className="main-content">
-          <div className="search-bar">
-            <form onSubmit={handleSearch}>
-              <input
-                type="text"
-                placeholder="Search by title or author..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button type="submit" className="btn-primary">Search</button>
-            </form>
+            <div className="modal-actions">
+              <button className="cancel-btn" onClick={() => setShowUploadModal(false)}>Cancel</button>
+            </div>
           </div>
+        </div>
+      )}
 
-          {loading ? (
-            <div className="loading">Loading...</div>
-          ) : ebooks.length === 0 ? (
-            <div className="empty-state">
-              <p>No ebooks found. Upload your first ebook to get started!</p>
+      {selectedBook && (
+        <div className="modal-overlay" onClick={() => setSelectedBook(null)}>
+          <div className="book-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="detail-book" style={{ '--book-color': getBookColor(selectedBook.title) }}>
+              <div className="detail-book-spine">
+                <span>{selectedBook.title}</span>
+              </div>
+              <div className="detail-book-cover">
+                <span className="format-badge">{selectedBook.file_format.toUpperCase()}</span>
+              </div>
             </div>
-          ) : (
-            <div className="ebook-grid">
-              {ebooks.map((ebook) => (
-                <div key={ebook.id} className="ebook-card">
-                  <div className="ebook-icon">
-                    {ebook.file_format.toUpperCase()}
-                  </div>
-                  <div className="ebook-info">
-                    <h3>{ebook.title}</h3>
-                    {ebook.author && <p className="author">by {ebook.author}</p>}
-                    <p className="meta">
-                      {ebook.file_format.toUpperCase()} • {formatFileSize(ebook.file_size)}
-                    </p>
-                  </div>
-                  <div className="ebook-actions">
-                    <button
-                      onClick={() => handleDownload(ebook)}
-                      className="btn-primary"
-                    >
-                      Download
-                    </button>
-                    {ebook.file_format === 'pdf' && (
-                      <button
-                        onClick={() => handleConvert(ebook)}
-                        className="btn-secondary"
-                        disabled={converting === ebook.id}
-                      >
-                        {converting === ebook.id ? 'Converting...' : 'Convert to EPUB'}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(ebook)}
-                      className="btn-danger"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+            
+            <div className="detail-info">
+              <h2>{selectedBook.title}</h2>
+              {selectedBook.author && <p className="detail-author">by {selectedBook.author}</p>}
+              
+              <div className="detail-meta">
+                <span>Format: {selectedBook.file_format.toUpperCase()}</span>
+                <span>Size: {formatFileSize(selectedBook.file_size)}</span>
+              </div>
+
+              <div className="detail-actions">
+                <button 
+                  className="action-btn download-btn"
+                  onClick={() => handleDownload(selectedBook)}
+                >
+                  📥 Download
+                </button>
+                {selectedBook.file_format === 'pdf' && (
+                  <button 
+                    className="action-btn convert-btn"
+                    onClick={() => {
+                      setConverting(selectedBook.id);
+                      handleConvert(selectedBook).then(() => setConverting(null));
+                    }}
+                    disabled={converting === selectedBook.id}
+                  >
+                    {converting === selectedBook.id ? '⏳ Converting...' : '🔄 Convert to EPUB'}
+                  </button>
+                )}
+                <button 
+                  className="action-btn delete-btn"
+                  onClick={() => handleDelete(selectedBook)}
+                >
+                  🗑️ Delete
+                </button>
+              </div>
             </div>
-          )}
-        </main>
-      </div>
+            
+            <button className="close-btn" onClick={() => setSelectedBook(null)}>×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
