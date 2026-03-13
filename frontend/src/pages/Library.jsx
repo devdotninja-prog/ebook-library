@@ -190,7 +190,7 @@ function Library() {
     try {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const url = `${apiUrl}/api/ebooks/${book.id}/view?token=${token}`;
+      const url = `${apiUrl}/api/ebooks/${book.id}/view?t=${token}`;
       setPdfUrl(url);
     } catch (err) {
       console.error('Failed to load PDF:', err);

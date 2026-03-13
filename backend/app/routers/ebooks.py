@@ -2,8 +2,9 @@ import os
 import shutil
 import uuid
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Header
 from fastapi.responses import FileResponse
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, Ebook
@@ -132,13 +133,28 @@ def download_ebook(
 @router.get("/{ebook_id}/view")
 def view_ebook(
     ebook_id: int,
+    t: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
+    from jose import jwt, JWTError
+
+    if not t:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(t, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     ebook = (
-        db.query(Ebook)
-        .filter(Ebook.id == ebook_id, Ebook.owner_id == current_user.id)
-        .first()
+        db.query(Ebook).filter(Ebook.id == ebook_id, Ebook.owner_id == user.id).first()
     )
 
     if not ebook:
