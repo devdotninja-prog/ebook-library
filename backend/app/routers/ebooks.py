@@ -125,6 +125,7 @@ def download_ebook(
         path=ebook.file_path,
         filename=ebook.filename,
         media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={ebook.filename}"},
     )
 
 

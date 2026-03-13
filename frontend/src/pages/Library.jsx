@@ -61,16 +61,20 @@ function Library() {
   const handleDownload = async (ebook) => {
     try {
       const response = await downloadEbook(ebook.id);
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const blob = new Blob([response.data], { 
+        type: response.headers['content-type'] || 'application/octet-stream' 
+      });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', ebook.filename);
+      link.download = ebook.filename;
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Download failed');
+      console.error('Download error:', err);
+      alert('Download failed. Please try again.');
     }
   };
 
