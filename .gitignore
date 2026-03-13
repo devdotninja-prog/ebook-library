@@ -16,6 +16,9 @@ build/
 *.sqlite
 *.sqlite3
 
+# Storage (uploaded files)
+backend/storage/
+
 # Environment
 .env
 .env.local
