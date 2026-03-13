@@ -1,9 +1,8 @@
 import os
 import uuid
-import fitz  # PyMuPDF
+import re
+import fitz
 from ebooklib import epub
-from PIL import Image
-from io import BytesIO
 from typing import Tuple, Optional
 
 
@@ -20,41 +19,33 @@ class PDFToEPUBConverter:
             doc = fitz.open(self.pdf_path)
 
             self.book = epub.EpubBook()
-            self.book.set_identifier(f"ebook-{uuid.uuid4()}")
+            self.book.set_identifier(f"urn:uuid:{uuid.uuid4()}")
             self.book.set_title(title)
-            self.book.add_author(author)
+            self.book.add_author(author or "Unknown")
+            self.book.language = "en"
+
+            all_text = []
+            for page in doc:
+                text = page.get_text("text")
+                if text and text.strip():
+                    all_text.append(text.strip())
+
+            doc.close()
+
+            if not all_text:
+                return (
+                    False,
+                    "No text content found in PDF. This may be a scanned/image-based PDF.",
+                    None,
+                )
 
             chapters = []
-            chapter_content = ""
-            chapter_count = 0
-
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                text = page.get_text()
-
-                if text.strip():
-                    chapter_content += f"<p>{text}</p>\n"
-
-                    if self._is_new_chapter(text) or page_num == len(doc) - 1:
-                        if chapter_content.strip():
-                            chapter = epub.EpubHtml(
-                                title=f"Chapter {chapter_count + 1}",
-                                file_name=f"chapter_{chapter_count + 1}.xhtml",
-                                lang="en",
-                            )
-                            chapter.content = chapter_content
-                            self.book.add_item(chapter)
-                            chapters.append(chapter)
-                            chapter_content = ""
-                            chapter_count += 1
-
-            if not chapters:
+            for i, section_text in enumerate(all_text):
+                chapter_name = f"Chapter {i + 1}"
                 chapter = epub.EpubHtml(
-                    title="Content", file_name="content.xhtml", lang="en"
+                    title=chapter_name, file_name=f"chapter{i + 1}.xhtml", lang="en"
                 )
-                chapter.content = (
-                    chapter_content or "<p>No text content found in PDF.</p>"
-                )
+                chapter.content = f"<h1>{chapter_name}</h1><p>{section_text}</p>"
                 self.book.add_item(chapter)
                 chapters.append(chapter)
 
@@ -62,10 +53,25 @@ class PDFToEPUBConverter:
             self.book.add_item(epub.EpubNcx())
             self.book.add_item(epub.EpubNav())
 
-            style = """
-            body { font-family: Arial, sans-serif; margin: 1em; }
-            p { text-indent: 1em; margin-bottom: 0.5em; }
-            """
+            style = """body {
+    font-family: Georgia, serif;
+    font-size: 1em;
+    line-height: 1.6;
+    margin: 1.5em;
+    color: #333;
+}
+h1 {
+    font-size: 1.5em;
+    text-align: center;
+    margin-bottom: 1em;
+    color: #1a1a1a;
+}
+p {
+    text-indent: 1.5em;
+    margin-bottom: 0.8em;
+    text-align: justify;
+}"""
+
             nav_css = epub.EpubItem(
                 uid="style_nav",
                 file_name="style/nav.css",
@@ -78,29 +84,13 @@ class PDFToEPUBConverter:
             output_path = os.path.join(self.output_dir, output_filename)
 
             epub.write_epub(output_path, self.book, {})
-            doc.close()
 
             return True, "Conversion successful", output_filename
 
         except Exception as e:
-            return False, f"Conversion failed: {str(e)}", None
+            import traceback
 
-    def _is_new_chapter(self, text: str) -> bool:
-        text = text.strip().lower()
-        chapter_indicators = [
-            "chapter",
-            "section",
-            "part",
-            "introduction",
-            "conclusion",
-        ]
-        if len(text) < 100 and any(
-            indicator in text for indicator in chapter_indicators
-        ):
-            return True
-        if text.startswith("chapter") and len(text) < 50:
-            return True
-        return False
+            return False, f"Conversion failed: {str(e)}\n{traceback.format_exc()}", None
 
 
 def convert_pdf_to_epub(
