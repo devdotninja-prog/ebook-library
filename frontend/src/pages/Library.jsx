@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
+import * as pdfjsLib from 'pdfjs-dist';
 import { getEbooks, uploadEbook, downloadEbook, convertEbook, deleteEbook } from '../api';
 import './Library.css';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const BOOK_COLORS = [
   '#8B4513', '#2F4F4F', '#800020', '#1C3A5F', '#3D2B1F', 
@@ -17,6 +20,12 @@ function Library() {
   const [uploadData, setUploadData] = useState({ title: '', author: '' });
   const [selectedBook, setSelectedBook] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedBooks, setSelectedBooks] = useState([]);
+  const [readingBook, setReadingBook] = useState(null);
+  const [pdfPages, setPdfPages] = useState([]);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     fetchEbooks();
@@ -87,6 +96,16 @@ function Library() {
     }
   };
 
+  const handleBulkDownload = async () => {
+    for (const bookId of selectedBooks) {
+      const book = ebooks.find(e => e.id === bookId);
+      if (book) {
+        await handleDownload(book);
+      }
+    }
+    setSelectedBooks([]);
+  };
+
   const handleConvert = async (ebook) => {
     if (ebook.file_format !== 'pdf') {
       alert('Only PDF files can be converted to EPUB');
@@ -110,9 +129,40 @@ function Library() {
     try {
       await deleteEbook(ebook.id);
       setSelectedBook(null);
+      setReadingBook(null);
       fetchEbooks(search);
     } catch (err) {
       alert('Delete failed');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Are you sure you want to delete ${selectedBooks.length} books?`)) return;
+    
+    try {
+      for (const bookId of selectedBooks) {
+        await deleteEbook(bookId);
+      }
+      setSelectedBooks([]);
+      fetchEbooks(search);
+    } catch (err) {
+      alert('Delete failed');
+    }
+  };
+
+  const toggleSelectBook = (bookId) => {
+    setSelectedBooks(prev => 
+      prev.includes(bookId) 
+        ? prev.filter(id => id !== bookId)
+        : [...prev, bookId]
+    );
+  };
+
+  const selectAllBooks = () => {
+    if (selectedBooks.length === ebooks.length) {
+      setSelectedBooks([]);
+    } else {
+      setSelectedBooks(ebooks.map(e => e.id));
     }
   };
 
@@ -133,6 +183,50 @@ function Library() {
       hash = title.charCodeAt(i) + ((hash << 5) - hash);
     }
     return BOOK_COLORS[Math.abs(hash) % BOOK_COLORS.length];
+  };
+
+  const loadPdf = async (book) => {
+    setPdfLoading(true);
+    setReadingBook(book);
+    setCurrentPage(1);
+    setPdfPages([]);
+    
+    try {
+      const response = await downloadEbook(book.id);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      
+      const pdf = await pdfjsLib.getDocument(url).promise;
+      const pages = [];
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+        pages.push(canvas.toDataURL());
+      }
+      
+      setPdfPages(pages);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to load PDF:', err);
+      alert('Failed to load PDF');
+    }
+    
+    setPdfLoading(false);
+  };
+
+  const openBook = (ebook) => {
+    if (ebook.file_format === 'pdf') {
+      loadPdf(ebook);
+    } else {
+      setSelectedBook(ebook);
+    }
   };
 
   return (
@@ -170,6 +264,18 @@ function Library() {
             <span>Add Book</span>
           </button>
 
+          {selectedBooks.length > 0 && (
+            <div className="bulk-actions">
+              <span className="selected-count">{selectedBooks.length} selected</span>
+              <button className="bulk-btn download" onClick={handleBulkDownload}>
+                📥 Download All
+              </button>
+              <button className="bulk-btn delete" onClick={handleBulkDelete}>
+                🗑️ Delete All
+              </button>
+            </div>
+          )}
+
           <div className="library-stats">
             <div className="stat">
               <span className="stat-number">{ebooks.length}</span>
@@ -206,27 +312,56 @@ function Library() {
               </button>
             </div>
           ) : (
-            <div className="bookshelf">
-              {ebooks.map((ebook) => (
-                <div 
-                  key={ebook.id} 
-                  className="book"
-                  style={{ '--book-color': getBookColor(ebook.title) }}
-                  onClick={() => setSelectedBook(ebook)}
-                >
-                  <div className="book-spine">
-                    <span className="book-title">{ebook.title}</span>
-                    {ebook.author && <span className="book-author">{ebook.author}</span>}
-                  </div>
-                  <div className="book-cover">
-                    <div className="cover-content">
-                      <span className="cover-format">{ebook.file_format.toUpperCase()}</span>
-                      <span className="cover-title">{ebook.title}</span>
+            <>
+              {selectedBooks.length > 0 && (
+                <div className="selection-bar">
+                  <label className="select-all">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedBooks.length === ebooks.length}
+                      onChange={selectAllBooks}
+                    />
+                    Select All ({ebooks.length})
+                  </label>
+                  <span className="selection-info">
+                    {selectedBooks.length} of {ebooks.length} selected
+                  </span>
+                </div>
+              )}
+              <div className="bookshelf">
+                {ebooks.map((ebook) => (
+                  <div 
+                    key={ebook.id} 
+                    className={`book ${selectedBooks.includes(ebook.id) ? 'selected' : ''}`}
+                    style={{ '--book-color': getBookColor(ebook.title) }}
+                    onClick={() => openBook(ebook)}
+                  >
+                    <div 
+                      className="book-checkbox"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelectBook(ebook.id);
+                      }}
+                    >
+                      {selectedBooks.includes(ebook.id) ? '✓' : ''}
+                    </div>
+                    <div className="book-spine">
+                      <span className="book-title">{ebook.title}</span>
+                      {ebook.author && <span className="book-author">{ebook.author}</span>}
+                    </div>
+                    <div className="book-cover">
+                      <div className="cover-content">
+                        <span className="cover-format">{ebook.file_format.toUpperCase()}</span>
+                        <span className="cover-title">{ebook.title}</span>
+                        {ebook.file_format === 'pdf' && (
+                          <span className="read-badge">📖 Read</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </main>
       </div>
@@ -303,14 +438,10 @@ function Library() {
                 </button>
                 {selectedBook.file_format === 'pdf' && (
                   <button 
-                    className="action-btn convert-btn"
-                    onClick={() => {
-                      setConverting(selectedBook.id);
-                      handleConvert(selectedBook).then(() => setConverting(null));
-                    }}
-                    disabled={converting === selectedBook.id}
+                    className="action-btn read-btn"
+                    onClick={() => loadPdf(selectedBook)}
                   >
-                    {converting === selectedBook.id ? '⏳ Converting...' : '🔄 Convert to EPUB'}
+                    📖 Read Now
                   </button>
                 )}
                 <button 
@@ -323,6 +454,57 @@ function Library() {
             </div>
             
             <button className="close-btn" onClick={() => setSelectedBook(null)}>×</button>
+          </div>
+        </div>
+      )}
+
+      {readingBook && (
+        <div className="pdf-reader-overlay">
+          <div className="pdf-reader">
+            <div className="pdf-header">
+              <h2>{readingBook.title}</h2>
+              <div className="pdf-controls">
+                <button 
+                  className="pdf-nav-btn"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  ← Prev
+                </button>
+                <span className="page-indicator">
+                  Page {currentPage} of {pdfPages.length}
+                </span>
+                <button 
+                  className="pdf-nav-btn"
+                  onClick={() => setCurrentPage(p => Math.min(pdfPages.length, p + 1))}
+                  disabled={currentPage >= pdfPages.length}
+                >
+                  Next →
+                </button>
+                <button className="close-pdf-btn" onClick={() => setReadingBook(null)}>×</button>
+              </div>
+            </div>
+            
+            <div className="pdf-content">
+              {pdfLoading ? (
+                <div className="pdf-loading">
+                  <div className="loading-spinner"></div>
+                  <p>Loading PDF...</p>
+                </div>
+              ) : (
+                <div className="pdf-pages">
+                  {pdfPages.map((pageData, index) => (
+                    <img 
+                      key={index}
+                      src={pageData} 
+                      alt={`Page ${index + 1}`}
+                      className={index + 1 === currentPage ? 'active' : ''}
+                      style={{ display: index + 1 === currentPage ? 'block' : 'none' }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
