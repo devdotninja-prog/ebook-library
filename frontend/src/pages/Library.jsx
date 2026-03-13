@@ -417,12 +417,24 @@ function Library() {
                   📥 Download
                 </button>
                 {selectedBook.file_format === 'pdf' && (
-                  <button 
-                    className="action-btn read-btn"
-                    onClick={() => loadPdf(selectedBook)}
-                  >
-                    📖 Read Now
-                  </button>
+                  <>
+                    <button 
+                      className="action-btn read-btn"
+                      onClick={() => loadPdf(selectedBook)}
+                    >
+                      📖 Read Now
+                    </button>
+                    <button 
+                      className="action-btn convert-btn"
+                      onClick={() => {
+                        setConverting(selectedBook.id);
+                        handleConvert(selectedBook).then(() => setConverting(null));
+                      }}
+                      disabled={converting === selectedBook.id}
+                    >
+                      {converting === selectedBook.id ? '⏳ Converting...' : '🔄 Convert to EPUB'}
+                    </button>
+                  </>
                 )}
                 <button 
                   className="action-btn delete-btn"

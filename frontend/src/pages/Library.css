@@ -1031,3 +1031,19 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(90, 143, 90, 0.3);
 }
+
+/* Convert Button */
+.convert-btn {
+  background: linear-gradient(135deg, #6a5acd 0%, #483d8b 100%);
+  color: white;
+}
+
+.convert-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(106, 90, 205, 0.3);
+}
+
+.convert-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
