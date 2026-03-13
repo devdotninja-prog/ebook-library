@@ -186,11 +186,12 @@ function Library() {
   const loadPdf = async (book) => {
     setPdfLoading(true);
     setReadingBook(book);
+    setPdfUrl(null);
     
     try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const url = `${apiUrl}/api/ebooks/${book.id}/view?t=${token}`;
+      const response = await downloadEbook(book.id);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
       setPdfUrl(url);
     } catch (err) {
       console.error('Failed to load PDF:', err);
@@ -444,6 +445,9 @@ function Library() {
               <h2>{readingBook.title}</h2>
               <div className="pdf-controls">
                 <button className="close-pdf-btn" onClick={() => {
+                  if (pdfUrl) {
+                    window.URL.revokeObjectURL(pdfUrl);
+                  }
                   setReadingBook(null);
                   setPdfUrl(null);
                 }}>× Close</button>
