@@ -202,11 +202,7 @@ function Library() {
   };
 
   const openBook = (ebook) => {
-    if (ebook.file_format === 'pdf') {
-      loadPdf(ebook);
-    } else {
-      setSelectedBook(ebook);
-    }
+    setSelectedBook(ebook);
   };
 
   return (
@@ -333,9 +329,6 @@ function Library() {
                       <div className="cover-content">
                         <span className="cover-format">{ebook.file_format.toUpperCase()}</span>
                         <span className="cover-title">{ebook.title}</span>
-                        {ebook.file_format === 'pdf' && (
-                          <span className="read-badge">📖 Read</span>
-                        )}
                       </div>
                     </div>
                   </div>
