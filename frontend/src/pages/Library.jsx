@@ -22,10 +22,8 @@ function Library() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedBooks, setSelectedBooks] = useState([]);
   const [readingBook, setReadingBook] = useState(null);
-  const [pdfPages, setPdfPages] = useState([]);
+  const [pdfUrl, setPdfUrl] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const canvasRef = useRef(null);
 
   useEffect(() => {
     fetchEbooks();
@@ -188,31 +186,12 @@ function Library() {
   const loadPdf = async (book) => {
     setPdfLoading(true);
     setReadingBook(book);
-    setCurrentPage(1);
-    setPdfPages([]);
     
     try {
-      const response = await downloadEbook(book.id);
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      
-      const pdf = await pdfjsLib.getDocument(url).promise;
-      const pages = [];
-      
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        pages.push(canvas.toDataURL());
-      }
-      
-      setPdfPages(pages);
-      window.URL.revokeObjectURL(url);
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const url = `${apiUrl}/api/ebooks/${book.id}/view?token=${token}`;
+      setPdfUrl(url);
     } catch (err) {
       console.error('Failed to load PDF:', err);
       alert('Failed to load PDF');
@@ -464,24 +443,10 @@ function Library() {
             <div className="pdf-header">
               <h2>{readingBook.title}</h2>
               <div className="pdf-controls">
-                <button 
-                  className="pdf-nav-btn"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1}
-                >
-                  ← Prev
-                </button>
-                <span className="page-indicator">
-                  Page {currentPage} of {pdfPages.length}
-                </span>
-                <button 
-                  className="pdf-nav-btn"
-                  onClick={() => setCurrentPage(p => Math.min(pdfPages.length, p + 1))}
-                  disabled={currentPage >= pdfPages.length}
-                >
-                  Next →
-                </button>
-                <button className="close-pdf-btn" onClick={() => setReadingBook(null)}>×</button>
+                <button className="close-pdf-btn" onClick={() => {
+                  setReadingBook(null);
+                  setPdfUrl(null);
+                }}>× Close</button>
               </div>
             </div>
             
@@ -491,19 +456,13 @@ function Library() {
                   <div className="loading-spinner"></div>
                   <p>Loading PDF...</p>
                 </div>
-              ) : (
-                <div className="pdf-pages">
-                  {pdfPages.map((pageData, index) => (
-                    <img 
-                      key={index}
-                      src={pageData} 
-                      alt={`Page ${index + 1}`}
-                      className={index + 1 === currentPage ? 'active' : ''}
-                      style={{ display: index + 1 === currentPage ? 'block' : 'none' }}
-                    />
-                  ))}
-                </div>
-              )}
+              ) : pdfUrl ? (
+                <iframe 
+                  src={pdfUrl} 
+                  title={readingBook.title}
+                  className="pdf-iframe"
+                />
+              ) : null}
             </div>
           </div>
         </div>

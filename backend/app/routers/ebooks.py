@@ -129,6 +129,38 @@ def download_ebook(
     )
 
 
+@router.get("/{ebook_id}/view")
+def view_ebook(
+    ebook_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ebook = (
+        db.query(Ebook)
+        .filter(Ebook.id == ebook_id, Ebook.owner_id == current_user.id)
+        .first()
+    )
+
+    if not ebook:
+        raise HTTPException(status_code=404, detail="Ebook not found")
+
+    if not os.path.exists(ebook.file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if ebook.file_format == "pdf":
+        media_type = "application/pdf"
+    elif ebook.file_format == "epub":
+        media_type = "application/epub+zip"
+    else:
+        media_type = "application/octet-stream"
+
+    return FileResponse(
+        path=ebook.file_path,
+        filename=ebook.filename,
+        media_type=media_type,
+    )
+
+
 @router.post("/{ebook_id}/convert", response_model=ConvertResponse)
 def convert_ebook(
     ebook_id: int,
